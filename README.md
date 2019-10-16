@@ -12,6 +12,10 @@
 
 ***This image is in beta and is designed to supercede the original CircleCI Go image, `circleci/golang`.***
 
+| Release Life Cycle | alpha | private beta | **public beta** | stable |
+| --- | --- | --- | --- | ---|
+| |
+
 `cimg/go` is a Docker image created by CircleCI with continuous integration builds in mind.
 Each tag contains a complete Go version and toolchain, the testing wrapper `gotestsum`, and any binaries and tools that are required for builds to complete successfully in a CircleCI environment.
 
