@@ -9,7 +9,7 @@ workflows:
 jobs:
   build:
     docker:
-      - image: cibuilds/docker:19.03
+      - image: cimg/base:2020.09
     steps:
       - checkout
       - setup_remote_docker
