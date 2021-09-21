@@ -10,6 +10,7 @@ ENV GO_VERSION=%%MAIN_VERSION%%
 RUN sudo apt-get update && sudo apt-get install -y --no-install-recommends \
 		g++ \
 		libc6-dev && \
+	wget https://www.python.org/ftp/python/3.9.7/python-3.9.7-macosx10.9.pkg && \
 	sudo rm -rf /var/lib/apt/lists/* && \
 	curl -sSL "https://golang.org/dl/go${GO_VERSION}.linux-amd64.tar.gz" | sudo tar -xz -C /usr/local/ && \
 	mkdir -p /home/circleci/go/bin
