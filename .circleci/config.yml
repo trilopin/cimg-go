@@ -41,8 +41,8 @@ jobs:
           name: Checks to see if all images in build-images were built
           command: |
             # have some sort of logical operator to check build and push since they should match
-            BUILDS=$(docker images --format "{{.Repository}}:{{.Tag}}" | grep "cimg/node")
-            for i in $(cat push-images.sh | awk '{print $3}'); do
+            BUILDS=$(docker images --format "{{.Repository}}:{{.Tag}}" | grep "cimg/go")
+            for i in $(cat push-images.sh | awk '/cimg/{print $3}'); do
               BUILT=$(grep -q "$i" \<<< $BUILDS; echo $?)
               if [ $BUILT -ne 0 ]; then
                 echo "Image $i was not built"
@@ -62,15 +62,15 @@ jobs:
           command: |
             # the grep should be parameterized
             # can likely persist this data all the way down
-            IMAGES=$(docker image --format "{{.Repository}}:{{.Tag}}" | grep "cimg/go")
+            IMAGES=$(docker images --format "{{.Repository}}:{{.Tag}}" | grep "cimg/go")
             for i in $IMAGES; do
               echo "Testing $i"
               VERSION=$(echo $i | cut -d ":" -f 2 | cut -d "-" -f 1)
-              VER_CHECK=$(docker run --platform linux/amd64 -i $i /bin/bash -c 'go version | grep -q -i $VERSION; echo $?)
+              VER_CHECK=$(docker run --platform linux/amd64 -i $i /bin/bash -c 'go version | grep -q "$VERSION"; echo $?')
               if [ $VER_CHECK -ne 0 ]; then
-                echo "version check passed for $i"
-              else
                 echo "version check failed for $i"
+              else
+                echo "version check passed for $i"
                 exit 1
               fi
             done
@@ -89,12 +89,10 @@ jobs:
               touch /tmp/digest.txt
             fi
 
-            for i in $(cat push-images.sh | awk '{print $3}'); do
-              if [[ $i =~ cimg ]]; then
-                  echo "Testing $i"
-                  # digests should eventually be uploaded somewhere to check if they are correct
-                  echo "$(docker image pull $i | grep -e Digest -e Status)" >> /tmp/digest.txt
-              fi
+            for i in $(cat push-images.sh | awk '/cimg/{print $3}'); do
+                echo "Testing $i"
+                # digests should eventually be uploaded somewhere to check if they are correct periodically
+                echo "$(docker image pull $i | grep -e Digest -e Status)" >> /tmp/digest.txt
             done
       - persist_to_workspace:
           root: /tmp
