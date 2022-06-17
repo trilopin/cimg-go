@@ -7,16 +7,16 @@ orbs:
 workflows:
   main:
     jobs:
-      - cimg-orb/build-and-deploy:
-          image: cimg/go
-          context: cimg-publishing
+      # - cimg-orb/build-and-deploy:
+      #     image: cimg/go
+      #     context: cimg-publishing
       - build-check:
-          requires:
-            - cimg-orb/build-and-deploy
+          # requires:
+            # - cimg-orb/build-and-deploy
           context: cimg-publishing
       - run-check:
-          # requires:
-          #   - build-check
+          requires:
+            - build-check
           context: cimg-publishing
       - push-checks:
           # requires:
@@ -37,6 +37,11 @@ jobs:
           version: "20.10.12"
       - checkout
       - run: echo $DOCKER_TOKEN | docker login -u $DOCKER_USER --password-stdin
+      - run: |
+            # this is being run here in lieu of the build and deploy step but needs to be combined or strings persisted
+            # since docker images only looks on the local host, which was preventing me from checking whether
+            # builds were made or not
+            chmod +x && ./build-images.sh
       - run:
           name: Checks to see if all images in build-images were built
           command: |
@@ -49,6 +54,7 @@ jobs:
                 exit 1
               fi
             done
+      - 
   run-check:
     docker:
       - image: cimg/base:2022.06
@@ -62,8 +68,8 @@ jobs:
           command: |
             # the grep should be parameterized
             # can likely persist this data all the way down
-            IMAGES=$(docker images --format "{{.Repository}}:{{.Tag}}" | grep "cimg/go")
-            for i in $IMAGES; do
+            # IMAGES=$(docker images --format "{{.Repository}}:{{.Tag}}" | grep "cimg/go")
+            for i in $(cat push-images.sh | awk '/cimg/{print $3}'); do
               echo "Testing $i"
               VERSION=$(echo $i | cut -d ":" -f 2 | cut -d "-" -f 1)
               VER_CHECK=$(docker run --platform linux/amd64 -i $i /bin/bash -c 'go version | grep -q "$VERSION"; echo $?')
