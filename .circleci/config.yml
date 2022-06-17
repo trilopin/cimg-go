@@ -13,18 +13,18 @@ workflows:
       - build-check:
           requires:
             - cimg-orb/build-and-deploy
-          context: image-publishing
+          context: cimg-publishing
       - run-check:
-          requires:
-            - build-check
+          # requires:
+          #   - build-check
           context: cimg-publishing
       - push-checks:
-          requires:
-            - run-check
+          # requires:
+          #   - run-check
           context: cimg-publishing
       - check-digests:
-          requires:
-            - push-checks
+          # requires:
+          #   - push-checks
           context: cimg-publishing
 
 
