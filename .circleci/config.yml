@@ -41,7 +41,7 @@ jobs:
             # this is being run here in lieu of the build and deploy step but needs to be combined or strings persisted
             # since docker images only looks on the local host, which was preventing me from checking whether
             # builds were made or not
-            chmod +x && ./build-images.sh
+            chmod +x build-images.sh && ./build-images.sh
       - run:
           name: Checks to see if all images in build-images were built
           command: |
