@@ -62,7 +62,7 @@ jobs:
           command: |
             # the grep should be parameterized
             # can likely persist this data all the way down
-            IMAGES=$(docker images --format "{{.Repository}}:{{.Tag}}" | grep "cimg/go")
+            IMAGES=$(docker image --format "{{.Repository}}:{{.Tag}}" | grep "cimg/go")
             for i in $IMAGES; do
               echo "Testing $i"
               VERSION=$(echo $i | cut -d ":" -f 2 | cut -d "-" -f 1)
