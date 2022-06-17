@@ -39,6 +39,15 @@ jobs:
       - run: echo $DOCKER_TOKEN | docker login -u $DOCKER_USER --password-stdin
       - run:
           name: Checks to see if all images in build-images were built
+          command: |
+            # have some sort of logical operator to check build and push since they should match
+            BUILDS=$(docker images --format "{{.Repository}}:{{.Tag}}" | grep "cimg/node")
+            for i in $(cat push-images.sh | awk '{print $3}'); do
+              BUILT=$(grep -q "$i" \<<< $BUILDS; echo $?)
+              if [ $BUILT -ne 0 ]; then
+                echo "Image $i was not built"
+                exit 1
+              fi
   run-check:
     docker:
       - image: cimg/base:2022.06
@@ -89,7 +98,7 @@ jobs:
           paths:
             - digest.txt
       - store_artifacts:
-        path: /tmp/digest
+          path: /tmp/digest
   check-digests:
     docker:
       - image: cimg/base:2022.06
