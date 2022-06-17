@@ -14,18 +14,18 @@ workflows:
           # requires:
             # - cimg-orb/build-and-deploy
           context: cimg-publishing
-      - run-check:
-          requires:
-            - build-check
-          context: cimg-publishing
-      - push-checks:
+      # - run-check:
+      #     requires:
+      #       - build-check
+      #     context: cimg-publishing
+      # - push-checks:
           # requires:
           #   - run-check
-          context: cimg-publishing
-      - check-digests:
-          requires:
-            - push-checks
-          context: cimg-publishing
+      #     context: cimg-publishing
+      # - check-digests:
+      #     requires:
+      #       - push-checks
+      #     context: cimg-publishing
 
 
 jobs:
@@ -54,14 +54,31 @@ jobs:
                 exit 1
               fi
             done
-  run-check:
-    docker:
-      - image: cimg/base:2022.06
-    steps:
-      - setup_remote_docker:
-          version: "20.10.12"
-      - checkout
-      - run: echo $DOCKER_TOKEN | docker login -u $DOCKER_USER --password-stdin
+       - run:
+          name: Test if all pushed images should have matching hashes.
+          command: |
+            if [[ ! -e /tmp/digest.txt ]]; then
+              touch /tmp/digest.txt
+            fi
+
+            for i in $(cat push-images.sh | awk '/cimg/{print $3}'); do
+                echo "Testing $i"
+                # digests should eventually be uploaded somewhere to check if they are correct periodically
+                echo "$(docker image pull $i | grep -e Digest -e Status)" >> /tmp/digest.txt
+            done
+        - run:
+          name: Compare Digests to verify authenticity
+          command: |
+            DIGESTS=$(docker images --digests | awk '/sha256:/{print $3}')
+            for d in $DIGESTS; do
+                CHECK=$(awk '/sha256:/ {print $0}' /tmp/digest.txt | cut -d:  -f2- | grep -q '$d'; echo $?)
+                if [[ $CHECK -eq 0 ]]; then
+                  echo "Digest check passed"
+                else
+                  echo "Digest check failed:"
+                  exit 1
+                fi
+            done
       - run:
           name: Checks to see if all images within the registry are runnable and match their versions
           command: |
@@ -77,56 +94,5 @@ jobs:
               else
                 echo "version check passed for $i"
                 exit 1
-              fi
-            done
-  push-checks:
-    docker:
-      - image: cimg/base:2022.06
-    steps:
-      - setup_remote_docker:
-          version: "20.10.12"
-      - checkout
-      - run: echo $DOCKER_TOKEN | docker login -u $DOCKER_USER --password-stdin
-      - run:
-          name: Test if all pushed images should have matching hashes.
-          command: |
-            if [[ ! -e /tmp/digest.txt ]]; then
-              touch /tmp/digest.txt
-            fi
-
-            for i in $(cat push-images.sh | awk '/cimg/{print $3}'); do
-                echo "Testing $i"
-                # digests should eventually be uploaded somewhere to check if they are correct periodically
-                echo "$(docker image pull $i | grep -e Digest -e Status)" >> /tmp/digest.txt
-            done
-      - persist_to_workspace:
-          root: /tmp
-          paths:
-            - digest.txt
-      - store_artifacts:
-          path: /tmp/digest.txt
-  check-digests:
-    docker:
-      - image: cimg/base:2022.06
-    steps:
-      - setup_remote_docker:
-          version: "20.10.12"
-      - checkout
-      - attach_workspace:
-          at: /tmp
-      - run: echo $DOCKER_TOKEN | docker login -u $DOCKER_USER --password-stdin
-      - run:
-          name: Compare Digests to verify authenticity
-          command: |
-            DIGESTS=$(docker image ls --format "{{.Repository}}:{{.Tag}} {{.DIGEST}}" | awk '{print $2}')
-            for d in $DIGESTS; do
-              if [[ $d =~ sha256: ]]; then
-                CHECK=$(awk '/sha256:/ {print $0}' /tmp/digest.txt | cut -d:  -f2- | grep -q '$d'; echo $?)
-                if [[ $CHECK -eq 0 ]]; then
-                  echo "Digest check passed"
-                else
-                  echo "Digest check failed:"
-                  exit 1
-                fi
               fi
             done
