@@ -10,3 +10,107 @@ workflows:
       - cimg-orb/build-and-deploy:
           image: cimg/go
           context: cimg-publishing
+      - build-check:
+          requires:
+            - cimg-orb/build-and-deploy
+          context: image-publishing
+      - run-check:
+          requires:
+            - build-check
+          context: cimg-publishing
+      - push-checks:
+          requires:
+            - run-check
+          context: cimg-publishing
+      - check-digests:
+          requires:
+            - push-checks
+          context: cimg-publishing
+
+
+jobs:
+  build-check:
+    docker:
+      - image: cimg/base:2022.06
+    steps:
+      - setup_remote_docker:
+          version: "20.10.12"
+      - checkout
+      - run: echo $DOCKER_TOKEN | docker login -u $DOCKER_USER --password-stdin
+      - run:
+          name: Checks to see if all images in build-images were built
+  run-check:
+    docker:
+      - image: cimg/base:2022.06
+    steps:
+      - setup_remote_docker:
+          version: "20.10.12"
+      - checkout
+      - run: echo $DOCKER_TOKEN | docker login -u $DOCKER_USER --password-stdin
+      - run:
+          name: Checks to see if all images within the registry are runnable and match their versions
+          command: |
+            # the grep should be parameterized
+            # can likely persist this data all the way down
+            IMAGES=$(docker images --format "{{.Repository}}:{{.Tag}}" | grep "cimg/go")
+            for i in $IMAGES; do
+              echo "Testing $i"
+              VERSION=$(echo $i | cut -d ":" -f 2 | cut -d "-" -f 1)
+              if docker run --platform linux/amd64 -i $i /bin/bash -c 'go version | grep -i $VERSION'; then
+                echo "version check passed"
+              else
+                echo "version check failed"
+                exit 1
+              fi
+  push-checks:
+    docker:
+      - image: cimg/base:2022.06
+    steps:
+      - setup_remote_docker:
+          version: "20.10.12"
+      - checkout
+      - run: echo $DOCKER_TOKEN | docker login -u $DOCKER_USER --password-stdin
+      - run:
+          name: Test if all pushed images should have matching hashes.
+          command: |
+            if [[ ! -e /tmp/digest.txt ]]; then
+              touch /tmp/digest.txt
+            fi
+
+            for i in $(cat push-images.sh | awk '{print $3}'); do
+              if [[ $i =~ cimg ]]; then
+                  echo "Testing $i"
+                  # digests should eventually be uploaded somewhere to check if they are correct
+                  echo "$(docker image pull $i | grep -e Digest -e Status)" >> /tmp/digest.txt
+              fi
+            done
+      - persist_to_workspace:
+          root: /tmp
+          paths:
+            - digest.txt
+      - store_artifacts:
+        path: /tmp/digest
+  check-digests:
+    docker:
+      - image: cimg/base:2022.06
+    steps:
+      - setup_remote_docker:
+          version: "20.10.12"
+      - checkout
+      - attach_workspace:
+          at: /tmp
+      - run: echo $DOCKER_TOKEN | docker login -u $DOCKER_USER --password-stdin
+      - run:
+          name: Compare Digests to verify authenticity
+          command: |
+            DIGESTS=$(docker image ls --format "{{.Repository}}:{{.Tag}} {{.DIGEST}}" | awk '{print $2}')
+            for d in $DIGESTS; do
+              if [[ $d =~ sha256: ]]; then
+                CHECK=$(awk '/sha256:/ {print $0}' /tmp/digest.txt | cut -d:  -f2- | grep -q '$d'; echo $?)
+                if [[ $CHECK -eq 0 ]]; then
+                  echo "Digest check passed"
+                else
+                  echo "Digest check failed:"
+                  exit 1
+              fi
+            done
