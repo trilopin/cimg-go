@@ -54,7 +54,6 @@ jobs:
                 exit 1
               fi
             done
-      - 
   run-check:
     docker:
       - image: cimg/base:2022.06
