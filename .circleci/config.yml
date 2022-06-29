@@ -33,9 +33,9 @@ jobs:
     docker:
       - image: cimg/base:2022.06
     steps:
+      - checkout
       - setup_remote_docker:
           version: "20.10.12"
-      - checkout
       - run: echo $DOCKER_TOKEN | docker login -u $DOCKER_USER --password-stdin
       - run: |
             # this is being run here in lieu of the build and deploy step but needs to be combined or strings persisted
@@ -46,53 +46,74 @@ jobs:
           name: Checks to see if all images in build-images were built
           command: |
             # have some sort of logical operator to check build and push since they should match
-            BUILDS=$(docker images --format "{{.Repository}}:{{.Tag}}" | grep "cimg/go")
-            for i in $(cat push-images.sh | awk '/cimg/{print $3}'); do
+            #TODO: potentially run gen-dockerfiles to have a manifest of what needs to be run just as a check; or just replace installing
+                # and automatically run it when there is a build step if it's being built and pushed on main
+                # should be sent to a cci-testing workflow ferriswh33l/testing
+                # then sent to cimg-publishing context
+            #TODO: fix grep and make it a parameter
+            BUILDS=$(docker images --format "{{.Repository}}:{{.Tag}}" | grep "ccitest")
+            echo "$BUILDS builds"
+            for i in $(cat push-images.sh | awk '/ccitest/{print $3}'); do
               BUILT=$(grep -q "$i" \<<< $BUILDS; echo $?)
-              if [ $BUILT -ne 0 ]; then
+              echo "$BUILT built"
+              if [[ -n $BUILT ]] && [[ $BUILT -ne 0 ]]; then
                 echo "Image $i was not built"
                 exit 1
+              else
+                echo "Image $i was built"
               fi
             done
+      - run: chmod +x push-images.sh && ./push-images.sh
       - run:
           name: Test if all pushed images should have matching hashes.
           command: |
             if [[ ! -e /tmp/digest.txt ]]; then
               touch /tmp/digest.txt
+            else
+              rm /tmp/digest.txt
+              touch /tmp/digest.txt
             fi
-
-            for i in $(cat push-images.sh | awk '/cimg/{print $3}'); do
+            # TODO: fix this awk to be cimg
+            for i in $(cat push-images.sh | awk '/ccitest/{print $3}'); do
                 echo "Testing $i"
                 # digests should eventually be uploaded somewhere to check if they are correct periodically
                 echo "$(docker image pull $i | grep -e Digest -e Status)" >> /tmp/digest.txt
+                cat /tmp/digest.txt
             done
-      - run:
-          name: Compare Digests to verify authenticity
-          command: |
-            DIGESTS=$(docker images --digests | awk '/sha256:/{print $3}')
-            for d in $DIGESTS; do
-                CHECK=$(awk '/sha256:/ {print $0}' /tmp/digest.txt | cut -d:  -f2- | grep -q '$d'; echo $?)
-                if [[ $CHECK -eq 0 ]]; then
-                  echo "Digest check passed"
-                else
-                  echo "Digest check failed:"
-                  exit 1
-                fi
-            done
+    #   - run:
+    #       need to use this: docker inspect --format='{{index .RepoDigests 0}}' 
+    #       name: Compare Digests to verify authenticity
+    #       command: |
+    #         DIGESTS=$(docker images --digests | awk '/sha256:/{print $3}')
+    #             echo "$DIGESTS digests"
+    #         for d in $DIGESTS; do
+    #             CHECK=$(awk '/sha256:/ {print $0}' /tmp/digest.txt | cut -d:  -f2- | sed 's/^ *//g' | grep -q "$d"; echo $?)
+    #             if [[ $CHECK -eq 0 ]]; then
+    #               echo "$CHECK check"
+    #               echo "Digest check passed"
+    #             else
+    #               echo "Digest check failed:"
+    #               exit 1
+    #             fi
+    #         done
       - run:
           name: Checks to see if all images within the registry are runnable and match their versions
           command: |
             # the grep should be parameterized
             # can likely persist this data all the way down
-            # IMAGES=$(docker images --format "{{.Repository}}:{{.Tag}}" | grep "cimg/go")
-            for i in $(cat push-images.sh | awk '/cimg/{print $3}'); do
+            # IMAGES=$(docker images --format "{{.Repository}}:{{.Tag}}" | grep "ccitest")
+            for i in $(cat push-images.sh | awk '/ccitest/{print $3}'); do
               echo "Testing $i"
+              #TODO: fix this account the images that might have parent tags
               VERSION=$(echo $i | cut -d ":" -f 2 | cut -d "-" -f 1)
-              VER_CHECK=$(docker run --platform linux/amd64 -i $i /bin/bash -c 'go version | grep -q "$VERSION"; echo $?')
+              echo "$VERSION version"
+              # TODO: Remove comments; parameterize grep
+              VER_CHECK=$(docker run --platform linux/amd64 -i $i /bin/bash -c 'echo testing | grep -q "testing"; echo $?')
+              echo "VER_CHECK: $VER_CHECK"
               if [ $VER_CHECK -ne 0 ]; then
                 echo "version check failed for $i"
+                exit 1
               else
                 echo "version check passed for $i"
-                exit 1
               fi
             done
